@@ -1,4 +1,6 @@
-site/
+node_modules/
+screenshots/
+run-report.json
 __pycache__/
 .venv/
 .env

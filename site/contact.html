@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contact · EasyChat</title>
+  <meta name="description" content="Get in touch with the EasyChat team.">
+  <meta name="theme-color" content="#2f6fdf">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700&display=swap">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <script src="assets/js/main.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="index.html" aria-label="EasyChat home"><svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2f6fdf"/><stop offset="1" stop-color="#5fb3f9"/></linearGradient></defs><path d="M6 4h20a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H14l-6 5v-5H6a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z" fill="url(#lg)"/><circle cx="11" cy="14" r="2" fill="#fff"/><circle cx="16" cy="14" r="2" fill="#fff"/><circle cx="21" cy="14" r="2" fill="#fff"/></svg><span>EasyChat</span></a>
+      <button class="nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="nav-links"><span></span><span></span><span></span></button>
+      <ul class="nav-links" id="nav-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="features.html">Features</a></li>
+        <li><a href="pricing.html">Pricing</a></li>
+        <li><a href="contact.html" aria-current="page">Contact</a></li>
+        <li class="nav-cta"><a class="btn btn-primary" href="pricing.html" style="color:var(--accent-ink);background:var(--accent)">Start free</a></li>
+      </ul>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="page-head">
+      <div class="orb a" aria-hidden="true"></div><div class="orb b" aria-hidden="true"></div>
+      <div class="wrap">
+        <span class="eyebrow">Contact</span>
+        <h1 class="reveal-words">Talk to a real person</h1>
+        <p>Questions about plans, moving from another tool, or anything else. We reply within one working day.</p>
+      </div>
+    </section>
+    <section class="section" style="padding-top:32px">
+      <div class="wrap contact-grid">
+        <form class="form reveal" id="contact-form" novalidate>
+          <div class="row2">
+            <div class="field"><label for="name">Your name</label><input id="name" name="name" autocomplete="name" required><span class="err" id="name-err" aria-live="polite"></span></div>
+            <div class="field"><label for="email">Work email</label><input id="email" name="email" type="email" autocomplete="email" required><span class="err" id="email-err" aria-live="polite"></span></div>
+          </div>
+          <div class="field"><label for="topic">Topic</label>
+            <select id="topic" name="topic"><option>Sales</option><option>Support</option><option>Moving from another tool</option><option>Other</option></select></div>
+          <div class="field"><label for="message">Message</label><textarea id="message" name="message" required></textarea><span class="err" id="message-err" aria-live="polite"></span></div>
+          <button class="btn btn-primary" type="submit">Send message</button>
+          <p class="form-status" id="form-status" aria-live="polite"></p>
+        </form>
+        <aside class="side">
+          <div class="card reveal" data-delay="1"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="draw" pathLength="100" d="M4 5h16v11H9l-5 4z"/></svg></div><h3>Email us</h3><p>Prefer your own email app? Write to</p><p class="mail">hello@easychat.app</p></div>
+          <div class="card reveal" data-delay="2"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="draw" pathLength="100" d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></div><h3>Fast replies</h3><p>Monday to Friday, 9:00–18:00 CET. Pro and Business plans get priority.</p></div>
+          <div class="card reveal" data-delay="3"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle class="draw" pathLength="100" cx="9" cy="8" r="3.5"/><path class="draw" pathLength="100" d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path class="draw" pathLength="100" d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 4 6"/></svg></div><h3>Free migration help</h3><p>Moving from another chat tool? We'll import your channels and history for you.</p></div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <a class="brand" href="index.html"><svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2f6fdf"/><stop offset="1" stop-color="#5fb3f9"/></linearGradient></defs><path d="M6 4h20a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H14l-6 5v-5H6a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z" fill="url(#lg)"/><circle cx="11" cy="14" r="2" fill="#fff"/><circle cx="16" cy="14" r="2" fill="#fff"/><circle cx="21" cy="14" r="2" fill="#fff"/></svg><span>EasyChat</span></a>
+      <nav aria-label="Footer">
+        <a href="features.html">Features</a><a href="pricing.html">Pricing</a><a href="contact.html">Contact</a>
+      </nav>
+      <p>&copy; <span id="year">2026</span> EasyChat. Made for small teams.</p>
+    </div>
+  </footer>
+</body>
+</html>

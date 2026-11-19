@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EasyChat — Team chat without the clutter</title>
+  <meta name="description" content="EasyChat is a calm, simple chat app for small teams and freelancers.">
+  <meta name="theme-color" content="#2f6fdf">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700&display=swap">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <script src="assets/vendor/three.min.js" defer></script>
+  <script src="assets/js/hero3d.js" defer></script>
+  <script src="assets/js/main.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="index.html" aria-label="EasyChat home"><svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2f6fdf"/><stop offset="1" stop-color="#5fb3f9"/></linearGradient></defs><path d="M6 4h20a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H14l-6 5v-5H6a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z" fill="url(#lg)"/><circle cx="11" cy="14" r="2" fill="#fff"/><circle cx="16" cy="14" r="2" fill="#fff"/><circle cx="21" cy="14" r="2" fill="#fff"/></svg><span>EasyChat</span></a>
+      <button class="nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="nav-links"><span></span><span></span><span></span></button>
+      <ul class="nav-links" id="nav-links">
+        <li><a href="index.html" aria-current="page">Home</a></li>
+        <li><a href="features.html">Features</a></li>
+        <li><a href="pricing.html">Pricing</a></li>
+        <li><a href="contact.html">Contact</a></li>
+        <li class="nav-cta"><a class="btn btn-primary" href="pricing.html" style="color:var(--accent-ink);background:var(--accent)">Start free</a></li>
+      </ul>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-bg" aria-hidden="true"></div>
+      <canvas id="hero-3d" aria-hidden="true"></canvas>
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <span class="eyebrow">Team chat, minus the noise</span>
+          <h1 id="hero-title" class="reveal-words">Talk to your team <span class="grad">without the clutter.</span></h1>
+          <p class="lead">EasyChat gives small teams and freelancers one calm place for conversations, files and quick calls. Set up in two minutes, no training needed.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="pricing.html">Start free</a>
+            <a class="btn btn-ghost" href="features.html">See how it works</a>
+          </div>
+          <p class="hero-note"><span class="dot" aria-hidden="true"></span>Free for teams up to 10 people. No credit card.</p>
+        </div>
+        <div class="chat-demo" role="img" aria-label="Animated example of a team conversation in EasyChat">
+          <div class="chat-head">
+            <div class="avatar-stack" aria-hidden="true"><span style="background:#2f6fdf">M</span><span style="background:#1d8a5a">L</span><span style="background:#9a4fd0">Y</span></div>
+            <div><strong># studio-team</strong><small>3 members · all online</small></div>
+          </div>
+          <div class="chat-body" id="chat-body" aria-hidden="true"></div>
+          <div class="chat-input" aria-hidden="true"><span>Message #studio-team</span><b><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></b></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="marquee" aria-label="Teams using EasyChat">
+      <p>Trusted by 4,000+ small teams</p>
+      <div class="marquee-track" aria-hidden="true">
+        <span>Northwind Studio</span><span>Bluebird Bakery</span><span>Pixel &amp; Pine</span><span>Harbor Legal</span><span>Kite Coffee</span><span>Maple Dental</span><span>Orbit Freelance</span><span>Lumen Architects</span><span>Northwind Studio</span><span>Bluebird Bakery</span><span>Pixel &amp; Pine</span><span>Harbor Legal</span><span>Kite Coffee</span><span>Maple Dental</span><span>Orbit Freelance</span><span>Lumen Architects</span>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <span class="eyebrow">Why teams switch</span>
+          <h2>Everything you need. Nothing you don't.</h2>
+          <p>Big chat tools grew into control panels. EasyChat stays a chat app.</p>
+        </div>
+        <div class="cards">
+          <article class="card reveal" data-tilt><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="draw" pathLength="100" d="M4 5h16v11H9l-5 4z"/></svg></div><h3>Clear conversations</h3><p>Channels for projects, direct messages for quick questions, and threads that keep side topics out of the way.</p></article>
+          <article class="card reveal" data-delay="1" data-tilt><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="draw" pathLength="100" d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></div><h3>Ready in two minutes</h3><p>Invite your team with one link. No admin console, no setup calls, no 40-page guide.</p></article>
+          <article class="card reveal" data-delay="2" data-tilt><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect class="draw" pathLength="100" x="5" y="10" width="14" height="10" rx="2"/><path class="draw" pathLength="100" d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div><h3>Private by default</h3><p>Encrypted in transit and at rest. Your messages are never used for ads or sold to anyone.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top:0">
+      <div class="wrap stats">
+        <div class="stat reveal"><b data-count="2" data-suffix=" min">0 min</b><span>Average setup time</span></div>
+        <div class="stat reveal" data-delay="1"><b data-count="38" data-suffix="%">0%</b><span>Fewer notifications than before</span></div>
+        <div class="stat reveal" data-delay="2"><b data-count="4.9" data-suffix="/5">0/5</b><span>Rating from 1,200 reviews</span></div>
+        <div class="stat reveal" data-delay="3"><b data-count="99.9" data-suffix="%">0%</b><span>Uptime over the last year</span></div>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top:0">
+      <div class="wrap">
+        <figure class="quote reveal">
+          <div class="face" aria-hidden="true">PR</div>
+          <div>
+            <blockquote>“We moved our six-person studio over in an afternoon. People actually read messages again, because there are fewer of them and they're in the right place.”</blockquote>
+            <figcaption><strong>Priya Raman</strong>, founder of Northwind Studio</figcaption>
+          </div>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top:0">
+      <div class="wrap">
+        <div class="cta reveal">
+          <h2>Give your team a calmer place to talk.</h2>
+          <p>Start free with up to 10 people. Upgrade only when you need more history and storage.</p>
+          <a class="btn btn-primary" href="pricing.html">Start free</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <a class="brand" href="index.html"><svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2f6fdf"/><stop offset="1" stop-color="#5fb3f9"/></linearGradient></defs><path d="M6 4h20a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H14l-6 5v-5H6a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z" fill="url(#lg)"/><circle cx="11" cy="14" r="2" fill="#fff"/><circle cx="16" cy="14" r="2" fill="#fff"/><circle cx="21" cy="14" r="2" fill="#fff"/></svg><span>EasyChat</span></a>
+      <nav aria-label="Footer">
+        <a href="features.html">Features</a><a href="pricing.html">Pricing</a><a href="contact.html">Contact</a>
+      </nav>
+      <p>&copy; <span id="year">2026</span> EasyChat. Made for small teams.</p>
+    </div>
+  </footer>
+</body>
+</html>

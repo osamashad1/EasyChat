@@ -1,11 +1,13 @@
 name: AI Website Builder
 
+# Fully automated: brief -> Claude builds the site (3D + motion) -> static + browser checks
+# -> Claude repairs anything that fails -> screenshots -> PR preview or live deploy.
 on:
   push:
     branches: [main]
     paths: [site-brief.md, scripts/**, .github/workflows/ai-website.yml]
   pull_request:
-    paths: [site-brief.md, scripts/**]
+    paths: [site-brief.md, scripts/**, site/**]
   workflow_dispatch:
     inputs:
       effort:
@@ -13,11 +15,19 @@ on:
         default: high
         type: choice
         options: [low, medium, high, xhigh]
+      max_repairs:
+        description: "Automatic repair rounds if checks fail"
+        default: "2"
+      regenerate:
+        description: "Regenerate with Claude (false = just check and deploy the committed site)"
+        default: true
+        type: boolean
 
 permissions:
-  contents: read
+  contents: write        # commit the regenerated site back to main
   pages: write
   id-token: write
+  pull-requests: write   # post the preview summary on PRs
 
 concurrency:
   group: ai-website-${{ github.ref }}
@@ -26,6 +36,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -34,37 +47,104 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - run: pip install -r requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
-      - name: 1. Generate site with Claude
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: 1. Generate site with Claude (self-repairing)
+        if: env.HAS_KEY == 'true' && (github.event_name != 'workflow_dispatch' || inputs.regenerate)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python scripts/generate_site.py --effort "${{ inputs.effort || 'high' }}"
+        run: |
+          python scripts/generate_site.py \
+            --effort "${{ inputs.effort || 'high' }}" \
+            --max-repairs "${{ inputs.max_repairs || '2' }}"
 
-      - name: 2. Quality check
+      - name: Note when generation was skipped
+        if: env.HAS_KEY != 'true'
+        run: echo "::notice::ANTHROPIC_API_KEY is not set, so the committed site/ is checked and deployed as-is."
+
+      - name: 2. Static quality gate
         run: python scripts/check_site.py site
 
-      - name: 3a. Upload preview (pull requests)
+      - name: 3. Browser quality gate + screenshots
+        run: node scripts/browser_check.mjs site screenshots
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots
+          if-no-files-found: ignore
+
+      - name: Write run summary
+        if: always()
+        run: |
+          {
+            echo "## AI Website Builder"
+            if [ -f run-report.json ]; then
+              python - <<'PY'
+          import json
+          r = json.load(open("run-report.json"))
+          print(f"- Model: `{r['model']}` at effort `{r['effort']}`")
+          print(f"- Rounds: {len(r['attempts'])} ({', '.join(a['step'] for a in r['attempts'])})")
+          print(f"- Tokens: {r['input_tokens']:,} in / {r['output_tokens']:,} out")
+          print(f"- Generation time: {r['seconds']} s")
+          print(f"- Result: {'passed all checks' if r['passed'] else 'checks still failing'}")
+          PY
+            else
+              echo "- Generation skipped; checked the committed site."
+            fi
+            echo "- Screenshots: see the **screenshots** artifact on this run."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 4a. Upload preview (pull requests)
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: site-preview
           path: site
 
-      - name: 3b. Package for GitHub Pages
+      - name: 4b. Comment on the pull request
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.createComment({
+              ...context.repo, issue_number: context.issue.number,
+              body: `### Website preview ready\nThe site was built and passed the static and browser checks.\nDownload **site-preview** and **screenshots** from the [workflow run](${run}).`
+            });
+
+      - name: 4c. Commit regenerated site to main
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && hashFiles('run-report.json') != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site
+          git diff --cached --quiet || git commit -m "Regenerate site from brief [skip ci]" && git push
+
+      - name: 4d. Package for GitHub Pages
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
   deploy:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: 4. Deploy to GitHub Pages
+      - name: 5. Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

@@ -1,0 +1,12 @@
+{
+  "name": "easychat-ai-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "python3 scripts/check_site.py site && node scripts/browser_check.mjs site screenshots",
+    "pdf": "node scripts/make_pdf.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

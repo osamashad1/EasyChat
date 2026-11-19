@@ -30,7 +30,8 @@ class PageParser(HTMLParser):
                 self.refs.append(a[key])
 
 
-def main(site_dir: str = "site") -> int:
+def find_problems(site_dir: str = "site") -> list[str]:
+    """Return a list of human-readable problems (empty list = pass)."""
     root = Path(site_dir)
     errors = []
     if not (root / "index.html").is_file():
@@ -56,7 +57,12 @@ def main(site_dir: str = "site") -> int:
                 target = target / "index.html"
             if not target.exists():
                 errors.append(f"{name}: broken link -> {ref}")
+    return errors
 
+
+def main(site_dir: str = "site") -> int:
+    root = Path(site_dir)
+    errors = find_problems(site_dir)
     if errors:
         print("Site check FAILED:")
         print("\n".join(f"  - {e}" for e in errors))

@@ -1,0 +1,70 @@
+name: AI Website Builder
+
+on:
+  push:
+    branches: [main]
+    paths: [site-brief.md, scripts/**, .github/workflows/ai-website.yml]
+  pull_request:
+    paths: [site-brief.md, scripts/**]
+  workflow_dispatch:
+    inputs:
+      effort:
+        description: "Claude effort level"
+        default: high
+        type: choice
+        options: [low, medium, high, xhigh]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ai-website-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: 1. Generate site with Claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/generate_site.py --effort "${{ inputs.effort || 'high' }}"
+
+      - name: 2. Quality check
+        run: python scripts/check_site.py site
+
+      - name: 3a. Upload preview (pull requests)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-preview
+          path: site
+
+      - name: 3b. Package for GitHub Pages
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 4. Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,4 +1,5 @@
 """Free, instant pre-screening (no AI): language, German level, job type, seniority."""
+import datetime as dt
 import re
 
 EN_WORDS = {"the", "and", "you", "with", "for", "our", "are", "your", "will", "we", "team", "to", "of", "in", "is", "as", "an", "on", "be", "or"}
@@ -73,6 +74,11 @@ def prescreen(job):
     score -= 40 if not in_germany else 0
     score += 10 if re.search(CAREER_RELEVANT, job["title"].lower()) else 0
     score -= 60 if re.search(NOT_FOR_YOU, job["title"].lower()) else 0
+    try:  # adverts first posted long ago and re-listed are often stale
+        age = (dt.date.today() - dt.date.fromisoformat(job["posted"][:10])).days
+        score -= 15 if age > 120 else 0
+    except ValueError:
+        pass
     if job.get("distance_km") is not None:
         score -= min(15, max(0, (job["distance_km"] - 20) // 5))
     job["pre"] = {

@@ -177,6 +177,25 @@ def write_outputs(cfg, ranked, advisor, stats):
         "# Pipeline\n\n## Pending\n\n" +
         "".join(f"- [ ] {j['url']} | {j['company']} | {j['title']}\n" for j in top), encoding="utf-8")
 
+    # Machine-readable results (used by the browser Job Finder page)
+    def export(j):
+        ai = j.get("ai") or {}
+        return {
+            "id": re.sub(r"[^A-Za-z0-9_-]", "_", j["id"])[:120],
+            "title": j["title"], "company": j["company"], "location": j["location"],
+            "url": j["url"], "posted": j["posted"], "source": j["source"],
+            "distance_km": j.get("distance_km"), "remote": j["remote"],
+            "language": j["pre"]["language"], "student_type": j["pre"]["student_type"],
+            "prescore": j["pre"]["score"], "other_locations": len(j.get("other_locations") or []),
+            "description": j["description"][:4000], "found": today,
+            **({"aiScore": ai["score"], "verdict": ai["verdict"], "oneLine": ai["one_line"],
+                "why": ai["why"], "gaps": ai["gaps"], "germanLevel": ai["german_level_needed"],
+                "pay": ai["pay"]} if ai else {}),
+        }
+    (out / "jobs.json").write_text(json.dumps({"date": today, "found": stats["found"], "new": stats["new"],
+                                               "jobs": [export(j) for j in ranked]}, ensure_ascii=False, indent=1),
+                                   encoding="utf-8")
+
     # HTML report
     report = out / f"report-{today}.html"
     report.write_text(render_html(ranked, advisor, stats, today), encoding="utf-8")

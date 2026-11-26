@@ -4,3 +4,7 @@ run-report.json
 __pycache__/
 .venv/
 .env
+# job-agent: personal data never goes in this public repo
+job-agent/**/cv.md
+job-agent/**/agent-profile.yml
+job-results/

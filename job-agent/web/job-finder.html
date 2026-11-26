@@ -186,7 +186,7 @@ ul.gaps { color: var(--warn) }
     <div class="row">
       <button class="btn" id="sel-clear">Clear</button>
       <button class="btn" id="sel-skip">Skip selected</button>
-      <button class="btn go" id="sel-approve">Approve &amp; prepare</button>
+      <button class="btn go" id="sel-approve">Apply to selected</button>
     </div>
   </div>
 </div>
@@ -196,7 +196,7 @@ ul.gaps { color: var(--warn) }
   "use strict";
   const $ = (id) => document.getElementById(id);
   const STATUSES = [
-    ["todo", "To review"], ["saved", "Saved"], ["ready", "Ready to send"], ["applied", "Applied"], ["skip", "Skipped"], ["all", "All"]
+    ["todo", "To review"], ["saved", "Saved"], ["queued", "Apply queue"], ["ready", "Prepared"], ["applied", "Applied"], ["skip", "Skipped"], ["all", "All"]
   ];
   const state = { jobs: [], profile: null, meta: null, filter: "todo", q: "", sort: "score", english: false,
                   selected: new Set(), open: new Set(), busy: new Set(), loaded: false };
@@ -247,7 +247,7 @@ ul.gaps { color: var(--warn) }
 
   // ---------- filters
   function counts() {
-    const c = { todo: 0, saved: 0, ready: 0, applied: 0, skip: 0, all: state.jobs.length };
+    const c = { todo: 0, saved: 0, queued: 0, ready: 0, applied: 0, skip: 0, all: state.jobs.length };
     for (const j of state.jobs) { const s = statusOf(j); if (s === "new") c.todo++; else if (c[s] != null) c[s]++; }
     return c;
   }
@@ -282,10 +282,11 @@ ul.gaps { color: var(--warn) }
     }
     const m = state.meta;
     $("sub").textContent = m
-      ? `Updated ${m.date} · ${m.found} postings searched · ${state.jobs.length} matches · ${c.ready} ready to send · ${c.applied} applied`
+      ? `Updated ${m.date} · ${m.found} postings searched · ${state.jobs.length} matches · ${c.queued} in apply queue · ${c.applied} applied`
       : (state.loaded ? `${state.jobs.length} jobs` : "Loading your jobs…");
 
     const list = $("list"); list.replaceChildren();
+    if (c.queued && (state.filter === "queued" || state.filter === "todo")) list.append(queuePanel(c.queued));
     const items = visible();
     if (!items.length) {
       list.append(el("p", { class: "empty", text: state.loaded
@@ -314,7 +315,8 @@ ul.gaps { color: var(--warn) }
     const busy = state.busy.has(j.id);
     const url = safeUrl(j.url);
     const metaBits = [j.company, j.location, j.distance_km != null ? `${j.distance_km} km` : null, j.posted ? `posted ${j.posted}` : null, j.source].filter(Boolean).join(" · ");
-    const statusLabel = { new: null, saved: "Saved", ready: "Ready to send", applied: "Applied", skip: "Skipped" }[s];
+    const statusLabel = { new: null, saved: "Saved", ready: "Prepared", queued: "In apply queue", applied: "Applied", skip: "Skipped" }[s];
+    const prepared = !!j.kit;
 
     const body = el("div", { class: "body" },
       el("div", { class: "head" },
@@ -326,10 +328,12 @@ ul.gaps { color: var(--warn) }
         chips.map(([t, k]) => el("span", { class: "chip " + k, text: t }))) : null,
       j.oneLine ? el("p", { class: "line1", text: j.oneLine }) : null,
       el("div", { class: "actions" },
-        s === "ready" || s === "applied"
-          ? el("button", { class: "btn go", onclick: () => toggleOpen(j.id), text: state.open.has(j.id) ? "Hide application" : "Open application" })
-          : el("button", { class: "btn primary", disabled: busy || !sample, onclick: () => prepareMany([j.id]),
-              title: sample ? null : "Claude isn't available on this page", text: busy ? "Preparing…" : "Approve & prepare" }),
+        s !== "queued" && s !== "applied"
+          ? el("button", { class: "btn primary", disabled: busy || (!prepared && !sample),
+              onclick: () => prepared ? setStatus(j.id, "queued") : prepareMany([j.id]),
+              title: prepared || sample ? null : "Claude isn't available on this page", text: busy ? "Preparing…" : "Apply" })
+          : s === "queued" ? el("button", { class: "btn", onclick: () => setStatus(j.id, "ready"), text: "Remove from queue" }) : null,
+        prepared ? el("button", { class: "btn", onclick: () => toggleOpen(j.id), text: state.open.has(j.id) ? "Hide application" : "Show application" }) : null,
         url ? el("a", { class: "btn", href: url, target: "_blank", rel: "noopener", text: "View job" }) : null,
         s !== "saved" && s !== "applied" ? el("button", { class: "btn", onclick: () => setStatus(j.id, "saved"), text: "Save" }) : null,
         s !== "applied" ? el("button", { class: "btn", onclick: () => setStatus(j.id, "applied", { appliedAt: new Date().toISOString().slice(0, 10) }), text: "Mark applied" }) : null,
@@ -340,11 +344,11 @@ ul.gaps { color: var(--warn) }
         j.why?.length ? el("ul", { class: "why" }, j.why.map((x) => el("li", { text: str(x) }))) : null,
         j.gaps?.length ? el("ul", { class: "gaps" }, j.gaps.map((x) => el("li", { text: str(x) }))) : null,
         j.description ? el("div", { class: "desc", text: str(j.description) }) : null) : null,
-      (s === "ready" || s === "applied") && state.open.has(j.id) && j.kit ? kitView(j) : null,
+      state.open.has(j.id) && j.kit ? kitView(j) : null,
     );
     const sel = el("div", { class: "sel" }, el("input", { type: "checkbox", "aria-label": "Select " + j.title,
       checked: state.selected.has(j.id), onchange: (e) => { e.target.checked ? state.selected.add(j.id) : state.selected.delete(j.id); render(); } }));
-    return el("article", { class: "card" + (s === "ready" ? " ready" : "") }, sel, body);
+    return el("article", { class: "card" + (s === "queued" ? " ready" : "") }, sel, body);
   }
 
   function block(title, text) {
@@ -365,6 +369,7 @@ ul.gaps { color: var(--warn) }
       el("h4", { text: "How to send it" }),
       el("ol", { class: "steps" },
         (k.apply_steps || []).map((x) => el("li", { text: str(x) })),
+        el("li", { text: "Or let Claude fill the form for you: put the job in the Apply queue and follow the steps there." }),
         el("li", { text: "When it's sent, press Mark applied." })),
       emails.length ? block("Send to (email)", emails.join("\n")) : null,
       block("Email subject", k.email_subject),
@@ -378,6 +383,58 @@ ul.gaps { color: var(--warn) }
         downloads && p.cvPdfUrl ? el("button", { class: "btn", onclick: downloadCv, text: "Download my CV (PDF)" }) : null,
         el("button", { class: "btn", disabled: state.busy.has(j.id), onclick: () => prepareMany([j.id], true), text: "Rewrite with Claude" })),
       el("p", { class: "muted small", text: "Read everything before sending. Claude was told to use only facts from your profile." }));
+  }
+
+  const PAGE_URL = "https://claude.ai/artifact/MDvLVxb96iTbB58YRjwGTv";
+  function desktopPrompt(jobs) {
+    const p = state.profile || {};
+    const lines = [
+      "Please help me apply to these jobs from my Job Finder (" + PAGE_URL + "). Work through them one at a time.",
+      "",
+      "Rules:",
+      "- Use your browser to open each job link, find the employer's Apply button and go to their application form.",
+      "- Fill every field from MY DETAILS and that job's prepared texts below. Upload my CV: the PDF file CV_Md_Osama_Ibn_Shad_English.pdf in my Downloads folder.",
+      "- Never invent information. If the form asks something my details don't answer, leave it empty and tell me.",
+      "- STOP before the final Submit / Send button. Tell me the form is ready, and I'll check it and submit myself.",
+      "- If a login, account creation, captcha or terms checkbox appears, stop and ask me to do it.",
+      "- If the job says to apply by email (or an email address is given below): use my Gmail connector to create a DRAFT to that address with the subject and email text below, and attach my CV PDF if you can (if you can't attach it, tell me). Do not send it.",
+      "- When I tell you a job is submitted, say which one, then move on to the next.",
+      "",
+      "MY DETAILS",
+      `Name: ${str(p.name)}`, `Email: ${str(p.email)}`, `Phone: ${str(p.phone)}`, `City: ${str(p.city)}`,
+      `LinkedIn: ${str(p.linkedin)}`, `Availability: ${str(p.availability)}`, `Work permit: ${str(p.workPermit)}`,
+      "", "My CV (the only facts you may use):", str(p.cv, 6000),
+    ];
+    jobs.forEach((j, i) => {
+      const k = j.kit || {}, a = k.answers || {};
+      const emails = (k.apply_email ? [k.apply_email] : []).concat(findEmails(j.description)).filter((v, n, arr) => arr.indexOf(v) === n);
+      lines.push("", `=== JOB ${i + 1}: ${str(j.title)} at ${str(j.company)} (${str(j.location)}) ===`,
+        `Link: ${str(j.url)}`, emails.length ? `Apply by email to: ${emails.join(", ")}` : "Apply by email: no address given",
+        `Email subject: ${str(k.email_subject)}`, "Email / message text:", str(k.email_body), "", "Cover letter:", str(k.cover_letter), "",
+        "Answers for form questions:",
+        ...Object.entries(a).map(([q, v]) => `- ${q.replace(/_/g, " ")}: ${str(v)}`));
+    });
+    lines.push("", "At the end, list each job as: form filled and waiting for me / Gmail draft created / needs me (and why).");
+    return lines.join("\n");
+  }
+  function queuePanel(n) {
+    const queued = state.jobs.filter((j) => statusOf(j) === "queued" && j.kit).slice(0, 5);
+    const btn = el("button", { class: "btn go", text: `Copy the apply message (${queued.length} job${queued.length === 1 ? "" : "s"})` });
+    btn.addEventListener("click", async () => {
+      const text = desktopPrompt(queued);
+      try { await navigator.clipboard.writeText(text); btn.textContent = "Copied. Now paste it into the Claude app"; }
+      catch { box.hidden = false; box.value = text; box.select(); btn.textContent = "Text selected: press Ctrl+C"; }
+    });
+    const box = el("textarea", { rows: "6", hidden: true, "aria-label": "Apply message", readonly: true });
+    return el("div", { class: "panel" },
+      el("h2", { text: `${n} job${n === 1 ? "" : "s"} in your apply queue` }),
+      el("ol", { class: "steps" },
+        el("li", { text: "Save your CV PDF in Downloads once (My profile > Download my CV)." }),
+        el("li", { text: "Press the green button to copy the apply message (up to 5 jobs at a time)." }),
+        el("li", { text: "On your laptop, open the Claude desktop app, start a new chat, paste and send." }),
+        el("li", { text: "Claude fills each application form and stops before Submit. Check it and press Submit. Email jobs become Gmail drafts: check and press Send." }),
+        el("li", { text: "Back here, press Mark applied on each job you sent." })),
+      el("div", { class: "actions" }, btn), box);
   }
 
   function toggleOpen(id) { state.open.has(id) ? state.open.delete(id) : state.open.add(id); render(); }
@@ -462,9 +519,9 @@ ${str(j.description, 7000) || "(No description available. Judge from the title a
             email_subject: str(r.email_subject, 200), email_body: str(r.email_body, 3000), cover_letter: str(r.cover_letter, 6000),
             answers: Object.fromEntries(Object.entries(r.answers && typeof r.answers === "object" ? r.answers : {}).slice(0, 8).map(([k, v]) => [str(k, 40), str(v, 800)])),
           },
-          status: statusOf(j) === "applied" ? "applied" : "ready", preparedAt: new Date().toISOString().slice(0, 10),
+          status: statusOf(j) === "applied" ? "applied" : (rewrite ? statusOf(j) : "queued"), preparedAt: new Date().toISOString().slice(0, 10),
         };
-        Object.assign(j, patch); state.open.add(id);
+        Object.assign(j, patch);
         await db.doc("jobs/" + id).update(patch);
         done++;
       } catch (e) {
@@ -472,8 +529,8 @@ ${str(j.description, 7000) || "(No description available. Judge from the title a
         if (e && (e.code === "not_granted" || e.code === "sampling_disabled" || e.code === "rate_limited")) { ids.forEach((x) => state.busy.delete(x)); break; }
       } finally { state.busy.delete(id); render(); }
     }
-    $("selprogress").textContent = done ? `${done} application${done > 1 ? "s" : ""} ready. Open each to send.` : "";
-    if (done && state.filter === "todo") { state.filter = "ready"; render(); }
+    $("selprogress").textContent = done ? `${done} application${done > 1 ? "s" : ""} prepared and added to your apply queue.` : "";
+    if (done && state.filter === "todo" && !rewrite) { state.filter = "queued"; render(); }
   }
 
   // ---------- profile

@@ -56,7 +56,8 @@ def prescreen(job):
         job["job_type"] in ("PRAKTIKUM_TRAINEE",)
     entry = bool(re.search(ENTRY_TERMS, low))
     hands_on = bool(re.search(HANDS_ON, job["title"].lower()))
-    in_germany = job["source"] == "Arbeitsagentur" or bool(re.search(GERMANY, (job["location"] + " " + low[:3000])))
+    # Country comes from the location only: descriptions often name Germany for foreign jobs
+    in_germany = job["source"] == "Arbeitsagentur" or bool(re.search(GERMANY, job["location"].lower()))
     full_time_only = job["raw_flags"].get("full_time_only", False) or bool(
         re.search(r"\b(full[- ]time|vollzeit)\b", job["title"].lower()))
 

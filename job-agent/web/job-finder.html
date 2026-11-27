@@ -112,6 +112,12 @@ ul.gaps { color: var(--warn) }
 .field label { font-size: 13px; font-weight: 600 }
 .saved { color: var(--ok); font-size: 13.5px; font-weight: 600 }
 .empty { text-align: center; padding: 40px 16px; color: var(--muted) }
+.compose { border: 2px solid var(--ok); border-radius: 12px; padding: 14px; display: grid; gap: 10px; background: var(--ok-soft) }
+.compose h4 { margin: 0; font: 700 14px var(--display); color: var(--ok) }
+.compose .field label { font-size: 12.5px; font-weight: 600; color: var(--muted) }
+.compose textarea, .compose input { background: var(--surface) }
+.attach { font-size: 13.5px; display: flex; gap: 8px; align-items: center }
+.topactions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important } }
 </style>
 
@@ -121,10 +127,13 @@ ul.gaps { color: var(--warn) }
       <h1>Job Finder NRW</h1>
       <p class="sub" id="sub">Loading your jobs…</p>
     </div>
+    <div class="topactions">
+    <button class="btn" id="refresh" hidden title="Search the job boards again now">Find new jobs now</button>
     <div class="tabs" role="tablist" aria-label="Sections">
       <button role="tab" id="tab-jobs" aria-selected="true">Jobs</button>
       <button role="tab" id="tab-profile" aria-selected="false">My profile</button>
       <button role="tab" id="tab-add" aria-selected="false">Add a job</button>
+    </div>
     </div>
   </header>
   <p class="notice" id="notice" hidden></p>
@@ -139,6 +148,7 @@ ul.gaps { color: var(--warn) }
         <option value="date">Newest</option>
       </select>
       <label class="check"><input type="checkbox" id="english"> English postings only</label>
+      <label class="check"><input type="checkbox" id="emailonly"> One-click (email) jobs only</label>
     </div>
     <div class="list" id="list"></div>
   </section>
@@ -196,11 +206,18 @@ ul.gaps { color: var(--warn) }
   "use strict";
   const $ = (id) => document.getElementById(id);
   const STATUSES = [
-    ["todo", "To review"], ["saved", "Saved"], ["queued", "Apply queue"], ["ready", "Prepared"], ["applied", "Applied"], ["skip", "Skipped"], ["all", "All"]
+    ["todo", "To review"], ["saved", "Saved"], ["ready", "Ready to send"], ["queued", "Apply queue"], ["applied", "Applied"], ["skip", "Skipped"], ["all", "All"]
   ];
   const state = { jobs: [], profile: null, meta: null, filter: "todo", q: "", sort: "score", english: false,
-                  selected: new Set(), open: new Set(), busy: new Set(), loaded: false };
-  let db = null, sample = null, downloads = null;
+                  selected: new Set(), open: new Set(), busy: new Set(), loaded: false,
+                  emailOnly: false, compose: new Set(), drafts: {}, sending: new Set() };
+  let db = null, sample = null, downloads = null, mcp = null;
+  const TRIGGER_ID = "trig_01XfB4YWxxaFRRxKyQApwhck";
+  function jobEmails(j) {
+    // After Claude has read the ad, only its judgement counts (a contact address is not an application address)
+    if (j.kit) return j.kit.apply_email ? [...new Set([j.kit.apply_email, ...findEmails(j.description)])] : [];
+    return findEmails(j.description);
+  }
 
   // ---------- helpers
   function el(tag, attrs, ...kids) {
@@ -258,6 +275,7 @@ ul.gaps { color: var(--warn) }
       if (state.filter === "todo" && s !== "new") return false;
       if (!["todo", "all"].includes(state.filter) && s !== state.filter) return false;
       if (state.english && j.language !== "en" && !j.english_ok) return false;
+      if (state.emailOnly && !jobEmails(j).length) return false;
       if (q && !(str(j.title) + " " + str(j.company) + " " + str(j.location)).toLowerCase().includes(q)) return false;
       return true;
     });
@@ -271,6 +289,7 @@ ul.gaps { color: var(--warn) }
   $("q").addEventListener("input", (e) => { state.q = e.target.value; render(); });
   $("sort").addEventListener("change", (e) => { state.sort = e.target.value; render(); });
   $("english").addEventListener("change", (e) => { state.english = e.target.checked; render(); });
+  $("emailonly").addEventListener("change", (e) => { state.emailOnly = e.target.checked; render(); });
 
   // ---------- render
   function render() {
@@ -312,10 +331,12 @@ ul.gaps { color: var(--warn) }
     if (j.germanLevel) chips.push(["German: " + j.germanLevel, /none|keine|not|a1|a2/i.test(j.germanLevel) ? "good" : "warn"]);
     if (j.pay && !/not stated|unknown|keine/i.test(j.pay)) chips.push([j.pay, ""]);
     if (j.other_locations) chips.push([`+${j.other_locations} more locations`, ""]);
+    const emails = jobEmails(j);
+    if (emails.length && j.status !== "applied") chips.unshift(["One-click apply by email", "good"]);
     const busy = state.busy.has(j.id);
     const url = safeUrl(j.url);
     const metaBits = [j.company, j.location, j.distance_km != null ? `${j.distance_km} km` : null, j.posted ? `posted ${j.posted}` : null, j.source].filter(Boolean).join(" · ");
-    const statusLabel = { new: null, saved: "Saved", ready: "Prepared", queued: "In apply queue", applied: "Applied", skip: "Skipped" }[s];
+    const statusLabel = { new: null, saved: "Saved", ready: "Ready to send", queued: "In apply queue", applied: "Applied", skip: "Skipped" }[s];
     const prepared = !!j.kit;
 
     const body = el("div", { class: "body" },
@@ -328,11 +349,14 @@ ul.gaps { color: var(--warn) }
         chips.map(([t, k]) => el("span", { class: "chip " + k, text: t }))) : null,
       j.oneLine ? el("p", { class: "line1", text: j.oneLine }) : null,
       el("div", { class: "actions" },
-        s !== "queued" && s !== "applied"
-          ? el("button", { class: "btn primary", disabled: busy || (!prepared && !sample),
-              onclick: () => prepared ? setStatus(j.id, "queued") : prepareMany([j.id]),
-              title: prepared || sample ? null : "Claude isn't available on this page", text: busy ? "Preparing…" : "Apply" })
-          : s === "queued" ? el("button", { class: "btn", onclick: () => setStatus(j.id, "ready"), text: "Remove from queue" }) : null,
+        s === "applied" ? null
+          : emails.length && prepared
+            ? el("button", { class: "btn go", disabled: state.sending.has(j.id), onclick: () => { state.compose.add(j.id); render(); }, text: "Apply by email" })
+          : s !== "queued"
+            ? el("button", { class: "btn primary", disabled: busy || (!prepared && !sample),
+                onclick: () => prepared ? setStatus(j.id, "queued") : prepareMany([j.id]),
+                title: prepared || sample ? null : "Claude isn't available on this page", text: busy ? "Preparing…" : "Apply" })
+            : el("button", { class: "btn", onclick: () => setStatus(j.id, "ready"), text: "Remove from queue" }),
         prepared ? el("button", { class: "btn", onclick: () => toggleOpen(j.id), text: state.open.has(j.id) ? "Hide application" : "Show application" }) : null,
         url ? el("a", { class: "btn", href: url, target: "_blank", rel: "noopener", text: "View job" }) : null,
         s !== "saved" && s !== "applied" ? el("button", { class: "btn", onclick: () => setStatus(j.id, "saved"), text: "Save" }) : null,
@@ -344,6 +368,8 @@ ul.gaps { color: var(--warn) }
         j.why?.length ? el("ul", { class: "why" }, j.why.map((x) => el("li", { text: str(x) }))) : null,
         j.gaps?.length ? el("ul", { class: "gaps" }, j.gaps.map((x) => el("li", { text: str(x) }))) : null,
         j.description ? el("div", { class: "desc", text: str(j.description) }) : null) : null,
+      state.compose.has(j.id) && j.kit && s !== "applied" ? composer(j, emails) : null,
+      j.sentAt ? el("p", { class: "small muted", text: `Sent by email to ${str(j.sentTo)} on ${str(j.sentAt)}.` }) : null,
       state.open.has(j.id) && j.kit ? kitView(j) : null,
     );
     const sel = el("div", { class: "sel" }, el("input", { type: "checkbox", "aria-label": "Select " + j.title,
@@ -437,6 +463,97 @@ ul.gaps { color: var(--warn) }
       el("div", { class: "actions" }, btn), box);
   }
 
+  function composer(j, emails) {
+    const k = j.kit || {}, p = state.profile || {};
+    const d = state.drafts[j.id] || (state.drafts[j.id] = {
+      to: emails[0] || "", subject: str(k.email_subject) || `Application: ${str(j.title)}`, body: str(k.cover_letter || k.email_body) });
+    const sending = state.sending.has(j.id);
+    const to = el("input", { type: "email", id: "to-" + j.id, value: d.to, oninput: (e) => (d.to = e.target.value.trim()) });
+    const subj = el("input", { type: "text", id: "sub-" + j.id, value: d.subject, oninput: (e) => (d.subject = e.target.value) });
+    const body = el("textarea", { rows: "12", id: "body-" + j.id, oninput: (e) => (d.body = e.target.value) });
+    body.value = d.body;
+    const canSend = !!(mcp && p.cvPdfUrl);
+    return el("div", { class: "compose" },
+      el("h4", { text: "Your application email: check it, then send" }),
+      j.sendUnclear ? el("p", { class: "notice", text: `A send on ${str(j.sendUnclear)} got no clear answer. Check Gmail → Sent first so you don't apply twice.` }) : null,
+      el("div", { class: "field" }, el("label", { for: "to-" + j.id, text: "To" }), to,
+        emails.length > 1 ? el("p", { class: "small muted", text: "Other addresses in the job ad: " + emails.slice(1).join(", ") }) : null),
+      el("div", { class: "field" }, el("label", { for: "sub-" + j.id, text: "Subject" }), subj),
+      el("div", { class: "field" }, el("label", { for: "body-" + j.id, text: "Message (your cover letter)" }), body),
+      el("p", { class: "attach", text: p.cvPdfUrl ? "Attached: your CV (PDF)" : "No CV PDF found in your profile: add one before sending." }),
+      el("div", { class: "actions" },
+        el("button", { class: "btn go", disabled: sending || !canSend, onclick: () => sendEmail(j),
+          text: sending ? "Sending…" : "Send application" }),
+        el("button", { class: "btn", disabled: sending, onclick: () => { state.compose.delete(j.id); render(); }, text: "Cancel" })),
+      !mcp ? el("p", { class: "small", text: "Sending needs Gmail. Open this page on claude.ai with Gmail connected (Settings → Connectors)." }) : null,
+      el("p", { class: "small muted", text: "Sent from your Gmail. You'll find it in Gmail → Sent, and replies arrive in your inbox." }));
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(",")[1] || "");
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(blob);
+    });
+  }
+
+  function mcpErrorText(e) {
+    switch (e && e.code) {
+      case "server_not_connected": return "Gmail isn't connected. Add it on claude.ai: Settings → Connectors → Gmail.";
+      case "needs_reauth": return "Gmail needs you to sign in again: claude.ai Settings → Connectors → Gmail.";
+      case "not_in_manifest": case "approval_required": case "not_granted": return "This page isn't allowed to use Gmail yet. Press Send again and choose Allow.";
+      case "blocked_by_policy": return "Your account settings block sending from this page.";
+      case "selection_required": return "You have more than one Gmail connected. Choose one when claude.ai asks, then press Send again.";
+      case "tool_error": return "Gmail refused the email: " + str(e.message, 200);
+      case "server_unavailable": case "upstream_error": case "cancelled":
+        return "No clear answer from Gmail. It MAY have been sent: check Gmail → Sent before trying again.";
+      default: return "Sending isn't available here: " + str(e && e.message, 160);
+    }
+  }
+
+  async function sendEmail(j) {
+    const d = state.drafts[j.id] || {}, p = state.profile || {};
+    if (j.sentAt) { notice("This application was already sent on " + j.sentAt + "."); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.to || "")) { notice("Enter a valid email address in To."); return; }
+    if (!str(d.body).trim() || !str(d.subject).trim()) { notice("Add a subject and a message."); return; }
+    state.sending.add(j.id); render();
+    try {
+      const blob = await (await fetch(p.cvPdfUrl)).blob();
+      const content = await blobToBase64(blob);
+      const filename = "CV_" + str(p.name || "CV").replace(/[^A-Za-z0-9]+/g, "_") + ".pdf";
+      const res = await mcp.callTool("Gmail", "send_message", {
+        to: [d.to], subject: d.subject, body: d.body,
+        attachments: [{ content, filename, mimeType: "application/pdf" }] });
+      const today = new Date().toISOString().slice(0, 10);
+      const patch = { status: "applied", appliedAt: today, sentAt: today, sentTo: d.to,
+        gmailId: str(res && res.payload && res.payload.id, 80) };
+      Object.assign(j, patch); state.compose.delete(j.id);
+      await db.doc("jobs/" + j.id).update(patch);
+      notice(`Sent to ${d.to}. Your application to ${str(j.company, 60)} is on its way.`, "info");
+    } catch (e) {
+      if (e && e.code === "server_unavailable" || e && e.code === "upstream_error") {
+        await db.doc("jobs/" + j.id).update({ sendUnclear: new Date().toISOString().slice(0, 10) }).catch(() => {});
+      }
+      notice(mcpErrorText(e));
+    } finally { state.sending.delete(j.id); render(); }
+  }
+
+  async function refreshJobs() {
+    const b = $("refresh");
+    b.disabled = true; b.textContent = "Searching…";
+    try {
+      await mcp.callTool("Claude Code Remote", "fire_trigger", { trigger_id: TRIGGER_ID });
+      notice("Searching the job boards now. New jobs appear here by themselves in about 3 minutes.", "info");
+      b.textContent = "Search started";
+    } catch (e) {
+      b.disabled = false; b.textContent = "Find new jobs now";
+      notice(e && e.code === "server_not_connected" ? "Searching on demand isn't available here. New jobs still arrive every morning at 6:43."
+        : "Couldn't start a search right now. New jobs still arrive every morning at 6:43.");
+    }
+  }
+  $("refresh").addEventListener("click", refreshJobs);
+
   function toggleOpen(id) { state.open.has(id) ? state.open.delete(id) : state.open.add(id); render(); }
 
   // ---------- writes
@@ -497,7 +614,7 @@ ${str(j.description, 7000) || "(No description available. Judge from the title a
     if (!sample) { notice("Claude isn't available here. Open this page on claude.ai while signed in."); return; }
     if (!state.profile || !state.profile.cv) { notice("Add your CV in My profile first.", "info"); showTab("profile"); return; }
     ids = ids.filter((id) => !state.busy.has(id));
-    let done = 0;
+    let done = 0, emailReady = 0;
     for (const id of ids) state.busy.add(id);
     render();
     for (const id of ids) {
@@ -521,7 +638,11 @@ ${str(j.description, 7000) || "(No description available. Judge from the title a
           },
           status: statusOf(j) === "applied" ? "applied" : (rewrite ? statusOf(j) : "queued"), preparedAt: new Date().toISOString().slice(0, 10),
         };
+        const byEmail = !!patch.kit.apply_email;
+        if (byEmail && patch.status === "queued") patch.status = "ready";
         Object.assign(j, patch);
+        delete state.drafts[id];
+        if (byEmail && !rewrite) { state.compose.add(id); emailReady++; }
         await db.doc("jobs/" + id).update(patch);
         done++;
       } catch (e) {
@@ -529,8 +650,9 @@ ${str(j.description, 7000) || "(No description available. Judge from the title a
         if (e && (e.code === "not_granted" || e.code === "sampling_disabled" || e.code === "rate_limited")) { ids.forEach((x) => state.busy.delete(x)); break; }
       } finally { state.busy.delete(id); render(); }
     }
-    $("selprogress").textContent = done ? `${done} application${done > 1 ? "s" : ""} prepared and added to your apply queue.` : "";
-    if (done && state.filter === "todo" && !rewrite) { state.filter = "queued"; render(); }
+    const forms = done - emailReady;
+    $("selprogress").textContent = done ? [emailReady ? `${emailReady} ready to send by email` : "", forms ? `${forms} added to your apply queue` : ""].filter(Boolean).join(" · ") : "";
+    if (done && state.filter === "todo" && !rewrite) { state.filter = emailReady ? "ready" : "queued"; render(); }
   }
 
   // ---------- profile
@@ -539,7 +661,7 @@ ${str(j.description, 7000) || "(No description available. Judge from the title a
     const p = state.profile || {};
     for (const [k, id] of Object.entries(PF)) if (document.activeElement !== $(id)) $(id).value = str(p[k]);
     $("cv-download").hidden = !(downloads && p.cvPdfUrl);
-    if (state.loaded && !str(p.linkedin)) notice("Tip: add your LinkedIn link in My profile, so Claude includes it in every application.", "info");
+    if (state.loaded && !str(p.linkedin) && !state.tipShown) { state.tipShown = true; notice("Tip: add your LinkedIn link in My profile, so Claude includes it in every application.", "info"); }
   }
   $("p-save").addEventListener("click", async () => {
     if (!db) return;
@@ -585,7 +707,8 @@ ${str(j.description, 7000) || "(No description available. Judge from the title a
   render();
   (async () => {
     if (!window.claude || typeof window.claude.use !== "function") { notice("Open this page on claude.ai while signed in to see your jobs."); state.loaded = true; render(); return; }
-    [db, sample, downloads] = await Promise.all([claude.use("db"), claude.use("sample"), claude.use("downloads")]);
+    [db, sample, downloads, mcp] = await Promise.all([claude.use("db"), claude.use("sample"), claude.use("downloads"), claude.use("mcp")]);
+    $("refresh").hidden = !mcp;
     if (!db) { notice("Open this page on claude.ai while signed in to see your jobs."); state.loaded = true; render(); return; }
     const timer = setTimeout(() => { if (!state.loaded) notice("Your jobs can't be reached yet. Check your connection; the page keeps trying."); }, 10000);
     db.collection("jobs").onSnapshot((snap) => {

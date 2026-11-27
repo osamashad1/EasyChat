@@ -360,7 +360,7 @@ ul.gaps { color: var(--warn) }
         prepared ? el("button", { class: "btn", onclick: () => toggleOpen(j.id), text: state.open.has(j.id) ? "Hide application" : "Show application" }) : null,
         url ? el("a", { class: "btn", href: url, target: "_blank", rel: "noopener", text: "View job" }) : null,
         s !== "saved" && s !== "applied" ? el("button", { class: "btn", onclick: () => setStatus(j.id, "saved"), text: "Save" }) : null,
-        s !== "applied" ? el("button", { class: "btn", onclick: () => setStatus(j.id, "applied", { appliedAt: new Date().toISOString().slice(0, 10) }), text: "Mark applied" }) : null,
+        s !== "applied" ? el("button", { class: "btn", onclick: () => markApplied(j), text: "Mark applied" }) : null,
         s !== "skip" ? el("button", { class: "btn", onclick: () => setStatus(j.id, "skip"), text: "Skip" })
                      : el("button", { class: "btn", onclick: () => setStatus(j.id, "new"), text: "Undo skip" })),
       (j.why?.length || j.gaps?.length || j.description) ? el("details", { class: "more" },
@@ -531,12 +531,36 @@ ul.gaps { color: var(--warn) }
       Object.assign(j, patch); state.compose.delete(j.id);
       await db.doc("jobs/" + j.id).update(patch);
       notice(`Sent to ${d.to}. Your application to ${str(j.company, 60)} is on its way.`, "info");
+      if (await sendConfirmation(j, `Email application sent to ${d.to} with your CV attached`))
+        notice(`Sent to ${d.to}. A confirmation is on its way to your inbox (${str(p.email)}).`, "info");
     } catch (e) {
       if (e && e.code === "server_unavailable" || e && e.code === "upstream_error") {
         await db.doc("jobs/" + j.id).update({ sendUnclear: new Date().toISOString().slice(0, 10) }).catch(() => {});
       }
       notice(mcpErrorText(e));
     } finally { state.sending.delete(j.id); render(); }
+  }
+
+  // A short confirmation email to yourself, so every application shows up on your phone.
+  async function sendConfirmation(j, how) {
+    const p = state.profile || {};
+    if (!mcp || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str(p.email))) return false;
+    const today = new Date().toISOString().slice(0, 10);
+    const lines = [
+      `You applied for: ${str(j.title)}`, `Company: ${str(j.company)}`, `Location: ${str(j.location)}`,
+      `How: ${how}`, `Date: ${today}`, j.url ? `Job ad: ${str(j.url)}` : "",
+      "", "Tracked in your Job Finder: " + PAGE_URL, "Good luck!",
+    ].filter((x) => x !== null);
+    try {
+      await mcp.callTool("Gmail", "send_message", { to: [p.email], subject: `Applied: ${str(j.title, 80)} at ${str(j.company, 60)}`, body: lines.join("\n") });
+      await db.doc("jobs/" + j.id).update({ confirmedAt: today });
+      return true;
+    } catch { return false; }
+  }
+
+  async function markApplied(j) {
+    await setStatus(j.id, "applied", { appliedAt: new Date().toISOString().slice(0, 10) });
+    if (await sendConfirmation(j, "Applied on the company's website")) notice(`Marked as applied. A confirmation is on its way to ${str(state.profile?.email)}.`, "info");
   }
 
   async function refreshJobs() {

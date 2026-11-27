@@ -143,9 +143,19 @@ ul.gaps { color: var(--warn) }
     <div class="row">
       <input type="search" id="q" placeholder="Search title, company, city…" aria-label="Search jobs">
       <select id="sort" aria-label="Sort">
+        <option value="distance">Nearest first</option>
         <option value="score">Best match</option>
-        <option value="distance">Nearest</option>
         <option value="date">Newest</option>
+      </select>
+    </div>
+    <div class="row">
+      <label class="check" for="from">Distance from</label>
+      <select id="from" aria-label="Distance from"></select>
+      <label class="check" for="radius">within</label>
+      <select id="radius" aria-label="Maximum distance">
+        <option value="5">5 km</option><option value="10">10 km</option><option value="15">15 km</option>
+        <option value="20">20 km</option><option value="30">30 km</option><option value="50">50 km</option>
+        <option value="0">any distance</option>
       </select>
       <label class="check"><input type="checkbox" id="english"> English postings only</label>
       <label class="check"><input type="checkbox" id="emailonly"> One-click (email) jobs only</label>
@@ -212,6 +222,36 @@ ul.gaps { color: var(--warn) }
                   selected: new Set(), open: new Set(), busy: new Set(), loaded: false,
                   emailOnly: false, compose: new Set(), drafts: {}, sending: new Set() };
   let db = null, sample = null, downloads = null, mcp = null;
+  // ---------- location
+  const PLACES = {
+    home: ["Home (47057 Duisburg)", 51.4265, 6.7837], campus_kl: ["Campus Kamp-Lintfort", 51.5016, 6.5459],
+    campus_kleve: ["Campus Kleve", 51.7891, 6.1388], duesseldorf: ["Düsseldorf", 51.2277, 6.7735],
+    essen: ["Essen", 51.4556, 7.0116], oberhausen: ["Oberhausen", 51.4963, 6.8638], krefeld: ["Krefeld", 51.3388, 6.5853],
+  };
+  // City centres for jobs that come without exact coordinates
+  const CITIES = { duisburg: [51.4344, 6.7623], "düsseldorf": [51.2277, 6.7735], dusseldorf: [51.2277, 6.7735], essen: [51.4556, 7.0116],
+    oberhausen: [51.4963, 6.8638], "mülheim": [51.4275, 6.8825], krefeld: [51.3388, 6.5853], moers: [51.4516, 6.6408],
+    "kamp-lintfort": [51.5016, 6.5459], kleve: [51.7891, 6.1388], "köln": [50.9375, 6.9603], cologne: [50.9375, 6.9603],
+    dortmund: [51.5136, 7.4653], bochum: [51.4818, 7.2162], gelsenkirchen: [51.5177, 7.0857], neuss: [51.2042, 6.6879],
+    wuppertal: [51.2562, 7.1508], bonn: [50.7374, 7.0982], dinslaken: [51.5623, 6.7431], "neukirchen-vluyn": [51.4426, 6.5486], rheinberg: [51.5452, 6.5996] };
+  const pref = (k, d) => { try { return localStorage.getItem("jf_" + k) ?? d; } catch { return d; } };
+  const savePref = (k, v) => { try { localStorage.setItem("jf_" + k, v); } catch {} };
+  state.sort = pref("sort", "distance"); state.from = pref("from", "home"); state.radius = Number(pref("radius", "30"));
+  function km(a, b) {
+    const r = (x) => x * Math.PI / 180, dLa = r(b[0] - a[0]), dLo = r(b[1] - a[1]);
+    const h = Math.sin(dLa / 2) ** 2 + Math.cos(r(a[0])) * Math.cos(r(b[0])) * Math.sin(dLo / 2) ** 2;
+    return Math.round(2 * 6371 * Math.asin(Math.sqrt(h)));
+  }
+  function coordsOf(j) {
+    if (typeof j.lat === "number" && typeof j.lon === "number") return [j.lat, j.lon];
+    const loc = str(j.location).toLowerCase();
+    for (const [name, c] of Object.entries(CITIES)) if (loc.includes(name)) return c;
+    return null;
+  }
+  function distOf(j) {
+    const c = coordsOf(j), pl = PLACES[state.from] || PLACES.home;
+    return c ? km([pl[1], pl[2]], c) : null;
+  }
   const TRIGGER_ID = "trig_01XfB4YWxxaFRRxKyQApwhck";
   function jobEmails(j) {
     // After Claude has read the ad, only its judgement counts (a contact address is not an application address)
@@ -276,18 +316,23 @@ ul.gaps { color: var(--warn) }
       if (!["todo", "all"].includes(state.filter) && s !== state.filter) return false;
       if (state.english && j.language !== "en" && !j.english_ok) return false;
       if (state.emailOnly && !jobEmails(j).length) return false;
+      if (state.radius) { const d = distOf(j); if (d == null ? !j.remote : d > state.radius) return false; }
       if (q && !(str(j.title) + " " + str(j.company) + " " + str(j.location)).toLowerCase().includes(q)) return false;
       return true;
     });
     const by = {
       score: (a, b) => score(b) - score(a),
-      distance: (a, b) => (a.distance_km ?? 999) - (b.distance_km ?? 999),
+      distance: (a, b) => (distOf(a) ?? 9999) - (distOf(b) ?? 9999) || score(b) - score(a),
       date: (a, b) => str(b.posted).localeCompare(str(a.posted)),
     }[state.sort];
     return list.sort(by);
   }
   $("q").addEventListener("input", (e) => { state.q = e.target.value; render(); });
-  $("sort").addEventListener("change", (e) => { state.sort = e.target.value; render(); });
+  $("sort").addEventListener("change", (e) => { state.sort = e.target.value; savePref("sort", state.sort); render(); });
+  for (const [k, v] of Object.entries(PLACES)) $("from").append(el("option", { value: k, text: v[0] }));
+  $("sort").value = state.sort; $("from").value = PLACES[state.from] ? state.from : "home"; $("radius").value = String(state.radius);
+  $("from").addEventListener("change", (e) => { state.from = e.target.value; savePref("from", state.from); render(); });
+  $("radius").addEventListener("change", (e) => { state.radius = Number(e.target.value); savePref("radius", String(state.radius)); render(); });
   $("english").addEventListener("change", (e) => { state.english = e.target.checked; render(); });
   $("emailonly").addEventListener("change", (e) => { state.emailOnly = e.target.checked; render(); });
 
@@ -335,7 +380,9 @@ ul.gaps { color: var(--warn) }
     if (emails.length && j.status !== "applied") chips.unshift(["One-click apply by email", "good"]);
     const busy = state.busy.has(j.id);
     const url = safeUrl(j.url);
-    const metaBits = [j.company, j.location, j.distance_km != null ? `${j.distance_km} km` : null, j.posted ? `posted ${j.posted}` : null, j.source].filter(Boolean).join(" · ");
+    const dist = distOf(j);
+    const placeName = (PLACES[state.from] || PLACES.home)[0].replace(/ \(.*\)/, "");
+    const metaBits = [j.company, j.location, dist != null ? `${dist} km from ${placeName}` : (j.remote ? "home office" : null), j.posted ? `posted ${j.posted}` : null, j.source].filter(Boolean).join(" · ");
     const statusLabel = { new: null, saved: "Saved", ready: "Ready to send", queued: "In apply queue", applied: "Applied", skip: "Skipped" }[s];
     const prepared = !!j.kit;
 

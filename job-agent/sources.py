@@ -6,6 +6,7 @@ Both are public. Each source returns a list of dicts in one common shape:
 """
 import base64
 import html
+import math
 import json
 import re
 import time
@@ -50,7 +51,14 @@ BA_TYPES = {"job": 1, "internship_or_working_student": 34}
 BA_HOURS = {"part_time": "tz", "minijob": "mj", "shifts": "snw", "home_office": "ho"}
 
 
-def arbeitsagentur(searches, days=21, size=50, log=print):
+def km_between(a, b):
+    """Great-circle distance in km between two (lat, lon) points."""
+    (la1, lo1), (la2, lo2) = [(math.radians(x), math.radians(y)) for x, y in (a, b)]
+    h = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2
+    return round(2 * 6371 * math.asin(math.sqrt(h)))
+
+
+def arbeitsagentur(searches, days=21, size=50, log=print, home=None):
     """searches: list of {keywords:[...], where:'Duisburg', radius_km:30,
     offer_types:['job','internship_or_working_student'], hours:['part_time','minijob']}"""
     found = {}
@@ -75,14 +83,24 @@ def arbeitsagentur(searches, days=21, size=50, log=print):
                     ref = j.get("referenznummer")
                     if not ref or ref in found:
                         continue
-                    loc = (j.get("stellenlokationen") or [{}])[0].get("adresse", {})
+                    # A nationwide search (no city) is only for home-office jobs: the API's
+                    # home-office filter is loose, so drop on-site jobs far from home here.
+                    if not s.get("where") and not j.get("homeofficemoeglich"):
+                        continue
+                    place = (j.get("stellenlokationen") or [{}])[0]
+                    loc = place.get("adresse", {})
+                    # Distance from the candidate's home, not from this search's centre city
+                    dist = j.get("entfernung")
+                    if home and place.get("breite") is not None and place.get("laenge") is not None:
+                        dist = km_between(home, (place["breite"], place["laenge"]))
                     found[ref] = {
                         "id": "ba:" + ref,
                         "source": "Arbeitsagentur",
                         "title": j.get("stellenangebotsTitel", ""),
                         "company": j.get("firma", ""),
                         "location": " ".join(x for x in [loc.get("plz"), loc.get("ort")] if x),
-                        "distance_km": j.get("entfernung"),
+                        "distance_km": dist,
+                        "lat": place.get("breite"), "lon": place.get("laenge"),
                         "url": BA_PAGE + urllib.parse.quote(ref, safe=""),
                         "posted": j.get("datumErsteVeroeffentlichung", ""),
                         "description": "",

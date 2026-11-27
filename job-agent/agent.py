@@ -51,7 +51,9 @@ def collect(cfg):
     jobs = []
     ba = cfg.get("arbeitsagentur")
     if ba:
-        jobs += sources.arbeitsagentur(ba["searches"], days=ba.get("days", 21), log=log)
+        h = cfg.get("home") or {}
+        home = (h["lat"], h["lon"]) if "lat" in h and "lon" in h else None
+        jobs += sources.arbeitsagentur(ba["searches"], days=ba.get("days", 21), log=log, home=home)
     an = cfg.get("arbeitnow")
     if an:
         jobs += sources.arbeitnow(an.get("max_pages", 5), an.get("regions"), log=log)
@@ -185,6 +187,7 @@ def write_outputs(cfg, ranked, advisor, stats):
             "title": j["title"], "company": j["company"], "location": j["location"],
             "url": j["url"], "posted": j["posted"], "source": j["source"],
             "distance_km": j.get("distance_km"), "remote": j["remote"],
+            "lat": j.get("lat"), "lon": j.get("lon"),
             "language": j["pre"]["language"], "student_type": j["pre"]["student_type"],
             "prescore": j["pre"]["score"], "other_locations": len(j.get("other_locations") or []),
             "description": j["description"][:4000], "found": today,
